@@ -5,9 +5,7 @@ require 'ddtrace/ext/distributed'
 require 'ddtrace/ext/runtime'
 require 'ddtrace/ext/sampling'
 
-require 'ddtrace/tracer'
-require 'ddtrace/metrics'
-require 'ddtrace/diagnostics/health'
+require 'ddtrace/logger'
 
 module Datadog
   module Configuration
@@ -70,46 +68,32 @@ module Datadog
       end
 
       settings :diagnostics do
-        option :health_metrics do |o|
-          o.default do
-            Datadog::Diagnostics::Health::Metrics.new(
-              enabled: env_to_bool(Datadog::Ext::Diagnostics::Health::Metrics::ENV_ENABLED, false)
-            )
+        settings :health_metrics do |o|
+          option :enabled do |o|
+            o.default { env_to_bool(Datadog::Ext::Diagnostics::Health::Metrics::ENV_ENABLED, false) }
+            o.lazy
           end
-
-          o.lazy
         end
       end
 
-      option :tracer do |o|
-        o.default { Tracer.new }
-        o.lazy
+      # Backwards compatibility for configuring tracer e.g. `c.tracer debug: true`
+      def tracer(options = nil)
+        Datadog.tracer = options[:instance] if options && options.key?(:instance)
+        tracer = Datadog.tracer
 
-        # On reset, shut down the old tracer,
-        # then instantiate a new one.
-        o.resetter do |tracer|
-          tracer.shutdown!
-          Tracer.new
-        end
-
-        # Backwards compatibility for configuring tracer e.g. `c.tracer debug: true`
-        o.helper :tracer do |options = nil|
-          tracer = options && options.key?(:instance) ? set_option(:tracer, options[:instance]) : get_option(:tracer)
-
-          tracer.tap do |t|
-            unless options.nil?
-              t.configure(options)
-              Datadog::Logger.log = options[:log] if options[:log]
-              t.set_tags(options[:tags]) if options[:tags]
-              t.set_tags(env: options[:env]) if options[:env]
-              Datadog::Logger.debug_logging = options.fetch(:debug, false)
-            end
+        tracer.tap do |t|
+          unless options.nil?
+            t.configure(options)
+            Datadog::Logger.log = options[:log] if options[:log]
+            t.set_tags(options[:tags]) if options[:tags]
+            t.set_tags(env: options[:env]) if options[:env]
+            Datadog::Logger.debug_logging = options.fetch(:debug, false)
           end
         end
       end
 
       def runtime_metrics(options = nil)
-        runtime_metrics = get_option(:tracer).writer.runtime_metrics
+        runtime_metrics = Datadog.tracer.writer.runtime_metrics
         return runtime_metrics if options.nil?
 
         runtime_metrics.configure(options)

@@ -7,6 +7,17 @@ module Datadog
     module Health
       # Health metrics for diagnostics
       class Metrics < ::Datadog::Metrics
+        def initialize(options = {})
+          options = options.dup
+
+          # Default to global setting if not provided
+          unless options.key?(:enabled)
+            options[:enabled] = Datadog.configuration.diagnostics.health_metrics.enabled
+          end
+
+          super(options)
+        end
+
         count :api_errors, Ext::Diagnostics::Health::Metrics::METRIC_API_ERRORS
         count :api_requests, Ext::Diagnostics::Health::Metrics::METRIC_API_REQUESTS
         count :api_responses, Ext::Diagnostics::Health::Metrics::METRIC_API_RESPONSES
